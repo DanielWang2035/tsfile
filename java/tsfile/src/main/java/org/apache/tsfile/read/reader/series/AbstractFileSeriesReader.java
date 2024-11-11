@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.reader.series;
 
+import java.util.ArrayList;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -35,6 +36,7 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
   protected IChunkLoader chunkLoader;
   protected List<IChunkMetadata> chunkMetadataList;
   protected IChunkReader chunkReader;
+  protected List<String> currentChunkMeasurementNames = new ArrayList<>();
   private int chunkToRead;
 
   protected Filter filter;
