@@ -66,6 +66,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.TreeMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.addCurrentIndexNodeToQueue;
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.checkAndBuildLevelIndex;
@@ -130,6 +131,8 @@ public class TsFileIOWriter implements AutoCloseable {
   protected String encryptType;
 
   protected String encryptKey;
+
+  private final List<FlushChunkMetadataListener> flushListeners = new CopyOnWriteArrayList<>();
 
   /** empty construct function. */
   protected TsFileIOWriter() {
@@ -208,6 +211,10 @@ public class TsFileIOWriter implements AutoCloseable {
     this.encryptLevel = encryptLevel;
     this.encryptType = encryptType;
     this.encryptKey = encryptKey;
+  }
+
+  public void addFlushListener(FlushChunkMetadataListener listener) {
+    flushListeners.add(listener);
   }
 
   /**
@@ -723,6 +730,12 @@ public class TsFileIOWriter implements AutoCloseable {
       lastSerializePath = seriesPath;
       logger.debug("Flushing {}", seriesPath);
     }
+
+    // notify the listeners
+    for (final FlushChunkMetadataListener listener : flushListeners) {
+      listener.onFlush(sortedChunkMetadataList);
+    }
+
     // clear the cache metadata to release the memory
     chunkGroupMetadataList.clear();
     if (chunkMetadataList != null) {
