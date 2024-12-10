@@ -20,7 +20,7 @@
 package org.apache.tsfile.write.writer;
 
 import org.apache.tsfile.file.metadata.IChunkMetadata;
-import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.utils.Pair;
 
 import java.util.List;
@@ -28,6 +28,6 @@ import java.util.List;
 @FunctionalInterface
 public interface FlushChunkMetadataListener {
 
-  // measurement id -> chunk metadata list
-  void onFlush(List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList);
+  // Pair<device id, measurement id> -> chunk metadata list
+  void onFlush(List<Pair<Pair<IDeviceID, String>, List<IChunkMetadata>>> sortedChunkMetadataList);
 }

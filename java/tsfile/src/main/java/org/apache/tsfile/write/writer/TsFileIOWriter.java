@@ -66,7 +66,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.TreeMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.addCurrentIndexNodeToQueue;
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.checkAndBuildLevelIndex;
@@ -132,7 +131,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
   protected String encryptKey;
 
-  private final List<FlushChunkMetadataListener> flushListeners = new CopyOnWriteArrayList<>();
+  private final List<FlushChunkMetadataListener> flushListeners = new ArrayList<>();
 
   /** empty construct function. */
   protected TsFileIOWriter() {
@@ -672,6 +671,19 @@ public class TsFileIOWriter implements AutoCloseable {
     this.maxPlanIndex = maxPlanIndex;
   }
 
+  public long getMaxMetadataSize() {
+    return maxMetadataSize;
+  }
+
+  /**
+   * Set the max memory size of chunk metadata. Note that the new size may be larger than current
+   * chunk metadata size, so caller would better call {@link #checkMetadataSizeAndMayFlush()} after
+   * this to avoid violating memory control.
+   */
+  public void setMaxMetadataSize(long maxMetadataSize) {
+    this.maxMetadataSize = maxMetadataSize;
+  }
+
   /**
    * Check if the size of chunk metadata in memory is greater than the given threshold. If so, the
    * chunk metadata will be written to a temp files. <b>Notice! If you are writing a aligned device
@@ -711,29 +723,39 @@ public class TsFileIOWriter implements AutoCloseable {
   protected int sortAndFlushChunkMetadata() throws IOException {
     int writtenSize = 0;
     // group by series
-    List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList =
+    final List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList =
         TSMIterator.sortChunkMetadata(
             chunkGroupMetadataList, currentChunkGroupDeviceId, chunkMetadataList);
     if (tempOutput == null) {
       tempOutput = new LocalTsFileOutput(new FileOutputStream(chunkMetadataTempFile));
     }
     hasChunkMetadataInDisk = true;
+
+    // This list is the same as sortedChunkMetadataList, but Path is replaced by Pair<IDeviceID,
+    // String>
+    final List<Pair<Pair<IDeviceID, String>, List<IChunkMetadata>>>
+        sortedChunkMetadataListForCallBack = new ArrayList<>();
+
     for (Pair<Path, List<IChunkMetadata>> pair : sortedChunkMetadataList) {
-      Path seriesPath = pair.left;
-      boolean isNewPath = !seriesPath.equals(lastSerializePath);
+      final Path seriesPath = pair.left;
+      final boolean isNewPath = !seriesPath.equals(lastSerializePath);
       if (isNewPath) {
         // record the count of path to construct bloom filter later
         pathCount++;
       }
-      List<IChunkMetadata> iChunkMetadataList = pair.right;
+      final List<IChunkMetadata> iChunkMetadataList = pair.right;
       writtenSize += writeChunkMetadataToTempFile(iChunkMetadataList, seriesPath, isNewPath);
       lastSerializePath = seriesPath;
+      sortedChunkMetadataListForCallBack.add(
+          new Pair<>(
+              new Pair<>(seriesPath.getIDeviceID(), seriesPath.getMeasurement()),
+              iChunkMetadataList));
       logger.debug("Flushing {}", seriesPath);
     }
 
     // notify the listeners
     for (final FlushChunkMetadataListener listener : flushListeners) {
-      listener.onFlush(sortedChunkMetadataList);
+      listener.onFlush(sortedChunkMetadataListForCallBack);
     }
 
     // clear the cache metadata to release the memory
